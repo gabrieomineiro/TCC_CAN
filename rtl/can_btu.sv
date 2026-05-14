@@ -7,7 +7,7 @@
 // Versão: 1.0
 //-----------------------------------------------------------------------------
 
-module can_btu_top #(
+module can_btu #(
     parameter int CLK_FREQ_HZ = 50_000_000,  // Frequência do clock do sistema
     parameter int BAUD_RATE   = 500_000      // Taxa de transmissão CAN alvo
 )(

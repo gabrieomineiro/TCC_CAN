@@ -1,0 +1,1226 @@
+-Estou querendo fazer um controlador CAN em verilog/systemverilog que funcionaria como módulo responsável pela comunicação de um módulo mais complexo que inclui o controlador. Até agora tenho um módulo reponsavel pelo bit timing unit. Liste que módulos são necessários para a comunicação completa
+
+--Para implementar um **controlador CAN** completo em Verilog/SystemVerilog (compatível com a especificação CAN 2.0A/B ou CAN FD), você precisará dos seguintes módulos, além da **Bit Timing Unit (BTU)** que você já possui:
+
+---
+
+## **Módulos essenciais para o controlador CAN**
+
+### 1. **Bit Stream Processor (BSP)**  
+- **Função:** Gerencia a serialização/deserialização dos bits no barramento CAN (RX/TX).  
+- **Responsabilidades:**  
+  - Monitora o bit de dominante/recessivo no RX.  
+  - Gera o bit TX com base no estado da máquina de estados.  
+  - Implementa **NRZ (Non-Return to Zero)** com **bit stuffing** (5 bits iguais → bit oposto).  
+
+### 2. **CRC Unit (Cyclic Redundancy Check)**  
+- **Função:** Calcula e verifica o CRC de 15 bits (CAN 2.0) ou 17/21 bits (CAN FD).  
+- **Responsabilidades:**  
+  - Gera CRC na transmissão.  
+  - Compara CRC recebido com o calculado na recepção.  
+  - Gera erro se houver divergência.
+
+### 3. **Error Management Logic (EML)**  
+- **Função:** Implementa a **contagem de erros** (Transmit Error Counter – TEC, Receive Error Counter – REC).  
+- **Responsabilidades:**  
+  - Incrementa/decrementa contadores conforme erros detectados.  
+  - Controla os estados do nó: **Error Active**, **Error Passive**, **Bus Off**.  
+  - Gera flag de erro (error frame) quando necessário.
+
+### 4. **Message Handler / Acceptance Filter**  
+- **Função:** Filtra mensagens recebidas com base no ID e máscara de aceitação.  
+- **Responsabilidades:**  
+  - Compara ID da mensagem com filtros configurados.  
+  - Rejeita mensagens não desejadas antes do armazenamento.  
+  - Suporte a **IDs padrão (11 bits)** e **estendido (29 bits)**.
+
+### 5. **Transmit Buffer & Receive Buffer (FIFO)**  
+- **Função:** Armazenamento temporário de mensagens.  
+- **Responsabilidades:**  
+  - **Tx Buffer:** Armazena mensagens prontas para transmissão (arbitragem).  
+  - **Rx FIFO:** Armazena mensagens recebidas e aprovadas no filtro.  
+  - Controle de overflow.
+
+### 6. **Arbitration Logic**  
+- **Função:** Implementa a arbitragem **CSMA/CD with BA** (bitwise arbitration no ID).  
+- **Responsabilidades:**  
+  - Compara bit a bit o ID transmitido com o que está no barramento.  
+  - Se perder arbitragem: para de transmitir e passa a receber.  
+  - Detecta bit dominante quando transmitiu recessivo → perdeu.
+
+### 7. **Frame Sequencer / Protocol Controller FSM**  
+- **Função:** Máquina de estados principal que implementa o **formato do frame CAN**:  
+  - **SOF** (Start of Frame)  
+  - **Arbitration Field** (ID + RTR/SRR/IDE)  
+  - **Control Field** (DLC)  
+  - **Data Field** (0-8 bytes ou mais no CAN FD)  
+  - **CRC Field** + Delimiter  
+  - **ACK Field** (Slot + Delimiter)  
+  - **EOF** (End of Frame)  
+  - **Intermission**  
+- **Responsabilidades:** Controla a sequência correta de transmissão/recepção.
+
+### 8. **Interrupt Controller / Status Register**  
+- **Função:** Comunicação com o host (módulo mais complexo que você mencionou).  
+- **Responsabilidades:**  
+  - Gera interrupções para: Rx disponível, Tx concluído, erro, Bus Off, etc.  
+  - Mantém registradores de status (transmitindo, recebendo, error state).  
+  - Interface com bus de sistema (APB, AXI, Wishbone, etc.).
+
+### 9. **Clock Domain Crossing (CDC) Unit** (se necessário)  
+- **Função:** Se o seu controlador CAN opera em domínio de clock diferente do módulo host ou do bit timing (ex: 8 MHz para CAN, 50 MHz para sistema).  
+- **Responsabilidades:** Sincronização de sinais de controle e dados entre domínios.
+
+---
+
+## **Conexão típica com BTU (Bit Timing Unit)**
+
+A BTU que você já possui deve fornecer sinais como:  
+- `sample_point` – momento de amostragem do RX.  
+- `tq_clk` – clock por time quantum (para sincronização de borda).  
+- `sync_edge_detected` – para reinicialização de temporizadores (hard/soft sync).  
+
+Esses sinais alimentam o **Bit Stream Processor** e o **Protocol FSM**.
+
+---
+
+## **Diagrama simplificado da hierarquia**  
+
+```
+CAN_Controller
+├── BTU (seu módulo existente)
+├── BSP
+├── CRC_Unit
+├── Error_Logic (TEC/REC)
+├── Acceptance_Filter
+├── Tx_FIFO
+├── Rx_FIFO
+├── Arbitration_Logic
+├── Protocol_FSM
+├── Interrupt_Controller
+└── Register_File (APB/AXI slave)
+```
+
+---
+
+## **Sugestão de ordem de implementação**  
+1. BTU + BSP (serialização/bit stuffing)  
+2. Protocol FSM básico (canal loopback inicial)  
+3. CRC Unit  
+4. Arbitration Logic  
+5. Error Management  
+6. Acceptance Filter + Buffers  
+7. Interrupt Controller / Registers  
+
+---
+
+Caso queira, posso detalhar a interface ou fornecer um template SystemVerilog para qualquer um desses módulos.
+
+
+Aqui está um **roteiro profissional de desenvolvimento de um controlador CAN**, estruturado como uma **Design House** (empresa de projeto de semicondutores) entregaria para um cliente.
+
+---
+
+# 📋 Roteiro de Desenvolvimento – Controlador CAN 2.0B
+
+**Cliente:** Módulo complexo (sistema embarcado proprietário)  
+**Tecnologia:** Verilog / SystemVerilog  
+**Alvo:** FPGA ou ASIC  
+**Entrega:** RTL sintetizável + testbench + documentação
+
+---
+
+## 🔹 FASE 0 – ESPECIFICAÇÃO E PLANEJAMENTO (2 semanas)
+
+### Atividades
+- Levantamento da especificação CAN 2.0B (ISO 11898-1)
+- Definição da interface com o módulo host:
+  - Largura do barramento de sistema (8/16/32 bits)
+  - Tipo de interface (APB, AXI-lite, Wishbone ou simples handshake)
+  - Pinos: `clk`, `rst_n`, `can_rx`, `can_tx`, `irq`, `addr[2:0]`, `data[7:0]`, `wr`, `rd`, `cs`
+- Definição das características:
+  - Apenas **BasicCAN** ou **FullCAN**?
+  - Suporte a **IDs estendidos (29 bits)**?
+  - Número de buffers de transmissão/recepção (ex: 1 Tx, 2 Rx FIFO)
+  - Filtros de aceitação (ex: 4 filtros configuráveis)
+
+### Entregáveis
+- Documento de arquitetura do controlador
+- Diagrama de blocos
+- Cronograma de entregas parciais
+
+---
+
+## 🔹 FASE 1 – MÓDULOS FUNDACIONAIS (3 semanas)
+
+### Semana 1 – Bit Timing Unit (já existente)
+- Verificar se sua BTU cobre:
+  - Divisor de clock para **Time Quanta (TQ)**
+  - **Synchronization Jump Width (SJW)**
+  - **Phase Segments (TSEG1, TSEG2)**
+  - Amostragem em `sample_point`
+  - Detecção de borda para **resincronização**
+- **Testbench:** simulação com diferentes taxas (125k, 250k, 500k, 1M bps)
+
+### Semana 2 – Bit Stream Processor (BSP)
+```systemverilog
+module bsp (
+  input  logic clk, rst_n,
+  input  logic can_rx,
+  output logic can_tx,
+  input  logic sample_point,      // da BTU
+  input  logic [7:0] tx_data,
+  output logic [7:0] rx_data,
+  input  logic tx_start,
+  output logic rx_done, tx_done,
+  output logic bit_stuff_error,
+  input  logic stuff_enable        // habilita/desabilita stuffing
+);
+```
+- Implementar:
+  - Serializador (TX)
+  - Deserializador (RX)
+  - Bit stuffing (5 bits iguais → insere bit complementar)
+  - Destuffing
+- **Testbench:** loopback interno com padrões de estouro de stuffing
+
+### Semana 3 – CRC Unit (15 bits CAN 2.0)
+- Polinômio: `x^15 + x^14 + x^10 + x^8 + x^7 + x^4 + x^3 + 1`
+- Implementar LFSR paralelo (um clock por bit)
+- Sinais:
+  - `crc_reset`, `crc_enable`, `crc_in_bit`, `crc_out[14:0]`, `crc_match`
+
+---
+
+## 🔹 FASE 2 – MÁQUINA DE PROTOCOLO (4 semanas)
+
+### Semana 4 – Frame Sequencer FSM
+```systemverilog
+typedef enum logic [4:0] {
+  IDLE, SOF, ARB_ID, ARB_EXT, CTRL, DATA, 
+  CRC, CRC_DEL, ACK_SLOT, ACK_DEL, EOF, 
+  INTERMISSION, OVERLOAD, ERROR_FLAG
+} can_state_t;
+```
+- Implementar sequência de **transmissão** e **recepção**
+- Controlar CRC enable/disable por campo do frame
+- Controlar bit stuffing ativo apenas entre SOF e CRC (excluindo CRC delimitador, ACK, EOF)
+
+### Semana 5 – Arbitration Logic
+- Comparar bit TX com bit RX durante campo de arbitração
+- Implementar perda de arbitragem:
+  - Se enviou recessivo (`1`) e leu dominante (`0`) → perdeu
+  - Passar para modo receptor imediatamente
+- Detectar **bus idle** (11 bits recessivos consecutivos)
+
+### Semana 6 – Error Management Logic
+```systemverilog
+module error_handler (
+  input  logic [7:0] tec, rec,           // contadores de erro
+  input  logic error_type,                // bit, stuff, crc, form, ack
+  output logic error_passive, bus_off,
+  output logic error_flag_out
+);
+```
+- Incrementar TEC em erros de transmissão
+- Incrementar REC em erros de recepção
+- Implementar **Error Active** (TEC<128 e REC<128)
+- **Error Passive** (TEC≥128 ou REC≥128)
+- **Bus Off** (TEC≥256) → só recupera após 128x11 bits recessivos
+
+### Semana 7 – Teste integrado BTU+BSP+CRC+FSM+Arbitration+Error
+- Simulação com 2 instâncias do controlador em loopback externo
+- Forçar erros: CRC errado, ACK perdido, bit stuffing inválido, erro de forma (form error)
+
+---
+
+## 🔹 FASE 3 – BUFFERS, FILTROS E INTERFACE (3 semanas)
+
+### Semana 8 – Acceptance Filter
+```systemverilog
+module acceptance_filter (
+  input  logic [10:0] can_id_11b,   // ou [28:0] extended
+  input  logic [10:0] mask, code,
+  output logic accept
+);
+```
+- Suporte a **4 filtros independentes**
+- Modo **lista branca** (accept if match) ou **lista negra**
+
+### Semana 9 – Tx/Rx FIFO + Message Handler
+- **Tx Buffer:** 1 mensagem (mínimo) ou FIFO com 3 mensagens
+- **Rx FIFO:** profundidade 4 a 8 mensagens
+- Cada mensagem armazena: ID (11/29b), DLC (4b), data (0-8 bytes), RTR, IDE
+- Sinais de controle: `tx_push`, `rx_pop`, `fifo_full`, `fifo_empty`, `rx_msg_ready`
+
+### Semana 10 – Interface com Host e Interrupt Controller
+- Registradores mapeados em memória:
+  - `CAN_CON` (controle: enable, loopback, reset)
+  - `CAN_STATUS` (tx_ready, rx_available, error_state, bus_off)
+  - `CAN_COMMAND` (tx_request, abort, release_buffer)
+  - `CAN_INT_EN` / `CAN_INT_FLAG` (interrupções)
+- Gerar `irq` para: Rx disponível, Tx completo, erro, Bus Off
+
+---
+
+## 🔹 FASE 4 – INTEGRAÇÃO E VALIDAÇÃO (3 semanas)
+
+### Semana 11 – Integração do topo
+```systemverilog
+module can_controller_top (
+  input  logic clk, rst_n,
+  // interface com host
+  input  logic [2:0] addr,
+  inout  logic [7:0] data,
+  input  logic wr, rd, cs,
+  output logic irq,
+  // interface CAN
+  input  logic can_rx,
+  output logic can_tx,
+  // interface com BTU (externa ou interna)
+  input  logic sample_point,
+  input  logic tq_clk
+);
+```
+
+### Semana 12 – Simulação de validação
+- **Testbench principal:** Verificação funcional completa
+- **Cenários críticos:**
+  - Arbitragem entre 2 nós transmitindo simultaneamente
+  - Recuperação de Bus Off
+  - Overflow de Rx FIFO
+  - Erro de stuffing em campo de dados
+  - Overload frame
+  - Sleep/wake-up
+
+### Semana 13 – Síntese e timing (FPGA/ASIC)
+- Síntese com constraints de clock (ex: 50 MHz sistema, 1 MHz CAN)
+- Relatório de área (LUTs/FFs no FPGA, gates no ASIC)
+- Verificação de setup/hold para interface assíncrona `can_rx`
+- Análise de **clock domain crossing** (se BTU tiver clock separado)
+
+---
+
+## 🔹 FASE 5 – ENTREGÁVEIS FINAIS (1 semana)
+
+### Documentação técnica
+- **Datasheet do controlador** (registradores, temporizações, timings)
+- **Guia de integração** (conexão com transceiver CAN externo)
+- **Manual de validação** (como rodar os testbenches)
+
+### Código entregue
+```
+can_controller/
+├── rtl/
+│   ├── can_top.sv
+│   ├── btu.sv               (seu módulo)
+│   ├── bsp.sv
+│   ├── crc15.sv
+│   ├── error_handler.sv
+│   ├── protocol_fsm.sv
+│   ├── arbiter.sv
+│   ├── acceptance_filter.sv
+│   ├── tx_fifo.sv
+│   ├── rx_fifo.sv
+│   ├── host_interface.sv
+│   └── interrupt_ctrl.sv
+├── tb/
+│   ├── tb_can_controller.sv
+│   ├── can_model.sv         (modelo comportamental de outro nó)
+│   └── test_cases/
+├── synth/
+│   └── can_controller.sdc
+└── docs/
+    └── specification.pdf
+```
+
+### Validação extra (opcional, mas recomendado)
+- Teste em **FPGA** com dois FPGAs conectados via CAN transceiver (ex: MCP2551)
+- Monitoramento com analisador lógico CAN (ex: PCAN-USB)
+
+---
+
+## 📅 CRONOGRAMA RESUMIDO
+
+| Fase 		| Descrição		 		| Semanas 			|
+|---------------|---------------------------------------|-------------------------------|
+| 0    		| Especificação 		 	| 2 				|
+| 1    		| Módulos fundamentais (BTU, BSP, CRC) 	| 3 				|
+| 2   		| Protocolo, arbitragem, erro 		| 4 				|
+| 3    		| Buffers, filtros, interface host 	| 3 				|
+| 4    		| Integração e validação 		| 3 				|
+| 5    		| Entregáveis finais 			| 1 				|
+| **Total** 	| 					| **16 semanas (~4 meses)** 	|
+
+---
+
+## 🛠️ FERRAMENTAS SUGERIDAS
+
+- **Simulação:** ModelSim, VCS, Verilator (open-source)
+- **Síntese FPGA:** Vivado (Xilinx), Quartus (Intel)
+- **Síntese ASIC:** Genus (Cadence), DC (Synopsys)
+- **Versionamento:** Git + GitFlow
+- **Documentação:** Markdown + Mermaid para diagramas
+
+---
+
+Se quiser, posso fornecer o **template SystemVerilog inicial** de qualquer um desses módulos para você começar a codificar hoje mesmo.
+
+
+-faça um roteiro de desenvolvimento do controlador CAN como se fosse uma design house
+
+
+--Aqui está o **diagrama de conexão completo** do controlador CAN, mostrando todos os módulos, seus sinais de interconexão e as interfaces com o mundo externo.
+
+---
+
+## 📌 TABELA DE CONEXÕES ENTRE MÓDULOS (Sinais Detalhados)
+
+### **1. Interface com o Host (Barramento do Sistema)**
+
+| Sinal 	| Direção | Largura | Conecta de 	   | Conecta para   | Descrição 	      |
+|---------------|---------|---------|----------------------|----------------|-------------------------|
+| `addr[2:0]` 	| Input   | 3 	    | Host 		   | Host Interface | Endereço do registrador |
+| `data[7:0]` 	| Inout   | 8 	    | Host 		   | Host Interface | Dados do barramento     |
+| `wr` 		| Input   | 1 	    | Host 		   | Host Interface | Write strobe 	      |
+| `rd` 		| Input   | 1 	    | Host 		   | Host Interface | Read strobe 	      |
+| `cs` 		| Input   | 1 	    | Host 		   | Host Interface | Chip select 	      |
+| `irq` 	| Output  | 1 	    | Interrupt Controller | Host 	    | Linha de interrupção    |
+
+---
+
+### **2. Host Interface ↔ Outros Módulos**
+	
+| Sinal 	    | Direção| Largura  | Origem 	       | Destino 	      | Descrição 		  |
+|-------------------|--------|----------|----------------------|----------------------|---------------------------|
+| `irq_enable[5:0]` | Output | 6 	| Host Interface       | Interrupt Controller | Habilita cada interrupção |
+| `irq_clear[5:0]`  | Output | 6 	| Host Interface       | Interrupt Controller | Clear flags 		  |
+| `irq_flags[5:0]`  | Input  | 6 	| Interrupt Controller | Host Interface       | Flags de interrupção      |
+| `control_reg`     | Output | 8 	| Host Interface       | Status/Control Regs  | Enable, loopback, reset   |
+| `status_reg` 	    | Input  | 8 	| Status/Control Regs  | Host Interface       | Estado atual 		  |
+| `tx_msg_push`     | Output | 1 	| Host Interface       | Tx FIFO 	      | Novo comando TX 	  |
+| `tx_id[28:0]`     | Output | 29 	| Host Interface       | Tx FIFO 	      | ID da mensagem 		  |
+| `tx_dlc[3:0]`     | Output | 4 	| Host Interface       | Tx FIFO 	      | Data length code  	  |
+| `tx_data[63:0]`   | Output | 64 	| Host Interface       | Tx FIFO 	      | Payload (0-8 bytes) 	  |
+| `rx_msg_pop`      | Output | 1 	| Host Interface       | Rx FIFO 	      | Lê mensagem recebida 	  |
+| `rx_available`    | Input  | 1 	| Rx FIFO 	       | Host Interface       | FIFO não vazio 		  |
+| `rx_id[28:0]`     | Input  | 29 	| Rx FIFO 	       | Host Interface       | ID recebido 	  	  |
+| `rx_dlc[3:0]`     | Input  | 4 	| Rx FIFO 	       | Host Interface       | DLC recebido   		  |
+| `rx_data[63:0]`   | Input  | 64 	| Rx FIFO 	       | Host Interface       | Payload recebido 	  |
+
+---
+
+### **3. Acceptance Filter ↔ Rx FIFO / Frame Sequencer**
+
+| Sinal 	       | Direção | Largura | Origem 		| Destino 	    | Descrição 	      |
+|----------------------|---------|---------|--------------------|-------------------|-------------------------|
+| `rx_id_filter[28:0]` | Input   | 29 	   | Frame Sequencer 	| Acceptance Filter | ID da mensagem recebida |
+| `filter_accept`      | Output  | 1  	   | Acceptance Filter  | Rx FIFO 	    | 1=aceita, 0=rejeita     |
+| `filter_code[28:0]`  | Input   | 29 	   | Host Interface 	| Acceptance Filter | Código do filtro 	      |
+| `filter_mask[28:0]`  | Input   | 29 	   | Host Interface 	| Acceptance Filter | Máscara do filtro       |
+
+---
+
+### **4. Frame Sequencer (FSM) ↔ BSP**
+
+| Sinal 	   | Direção| Largura| Origem 		 | Destino	   | Descrição 			|
+|------------------|--------|--------|-------------------|-----------------|----------------------------|
+| `fsm_state[4:0]` | Output | 5      | Frame Sequencer 	 | BSP 		   | Estado atual do protocolo  |
+| `tx_start` 	   | Output | 1      | Frame Sequencer   | BSP 		   | Inicia transmissão 	|
+| `tx_bit` 	   | Input  | 1      | BSP 		 | Frame Sequencer | Bit atual transmitido 	|
+| `rx_sample` 	   | Input  | 1      | BSP 		 | Frame Sequencer | Bit amostrado recebido 	|
+| `stuff_error`    | Input  | 1      | BSP 		 | Frame Sequencer | Erro de stuffing 		|
+| `tx_arb_lost`    | Input  | 1      | Arbitration Logic | Frame Sequencer | Perdeu arbitragem 		|
+
+---
+
+### **5. BSP ↔ CRC Unit**
+
+| Sinal 	  | Direção | Largura | Origem 		| Destino 	  | Descrição 		  |
+|-----------------|---------|---------|-----------------|-----------------|-----------------------|
+| `crc_enable`    | Output  | 1       | Frame Sequencer | CRC Unit 	  | Ativa cálculo CRC 	  |
+| `crc_reset` 	  | Output  | 1       | Frame Sequencer | CRC Unit	  | Reseta LFSR 	  |
+| `crc_bit_in`	  | Output  | 1       | BSP 		| CRC Unit 	  | Bit de dados para CRC |
+| `crc_out[14:0]` | Input   | 15      | CRC Unit 	| BSP 		  | Valor CRC calculado   |
+| `crc_match` 	  | Input   | 1	      | CRC Unit 	| Frame Sequencer | CRC conferiu 	  |
+
+---
+
+### **6. BSP ↔ BTU (seu módulo existente)**
+
+| Sinal 	 | Direção | Largura | Origem | Destino 	| Descrição 		      |
+|----------------|---------|---------|--------|-----------------|-----------------------------|
+| `tq_clk` 	 | Input   | 1 	     | BTU    | BSP, FSM, CRC 	| Clock de time quantum       |
+| `sample_point` | Input   | 1       | BTU    | BSP 		| Pulso de amostragem 	      |
+| `sync_edge` 	 | Input   | 1       | BTU    | Frame Sequencer | Detecção de borda para sync |
+| `bit_time`	 | Input   | 7:0     | BTU    | (config) 	| Configuração de timing      |
+
+---
+
+### **7. Arbitration Logic ↔ Frame Sequencer**
+
+| Sinal 		 | Direção| Largura| Origem	       | Destino 	   | Descrição 		      |
+|------------------------|--------|--------|-------------------|-------------------|--------------------------|
+| `arb_id_tx[28:0]` 	 | Output | 29 	   | Tx FIFO	       | Arbitration Logic | ID que está transmitindo |
+| `arb_bit_tx` 		 | Output | 1 	   | Frame Sequencer   | Arbitration Logic | Bit TX atual 	      |
+| `arb_bit_rx` 		 | Input  | 1 	   | BSP 	       | Arbitration Logic | Bit RX do barramento     |
+| `arb_won` 		 | Output | 1 	   | Arbitration Logic | Frame Sequencer   | 1=ganhou, 0=perdeu	      |
+| `arb_lost_at_bit[4:0]` | Output | 5 	   | Arbitration Logic | Error Mgmt 	   | Bit index onde perdeu    |
+
+---
+
+### **8. Error Management (TEC/REC) ↔ Todos**
+
+| Sinal 	    | Direção | Largura | Origem 	   | Destino 			| Descrição 				    |
+|-------------------|---------|---------|------------------|----------------------------|-------------------------------------------|
+| `tec[7:0]` 	    | Output  | 8 	| Error Mgmt 	   | Status Reg 		| Transmit error counter 		    |
+| `rec[7:0]` 	    | Output  | 8 	| Error Mgmt 	   | Status Reg 		| Receive error counter 		    |
+| `error_passive`   | Output  | 1 	| Error Mgmt       | Frame Sequencer, BSP 	| Estado passivo 			    |
+| `bus_off` 	    | Output  | 1 	| Error Mgmt 	   | Frame Sequencer, Host I/F  | Bus off 				    |
+| `error_type[2:0]` | Input   | 3 	| Frame Sequencer  | Error Mgmt 		| Tipo de erro (bit, stuff, crc, form, ack) |
+| `increment_tec`   | Input   | 1 	| Frame Sequencer  | Error Mgmt 		| Incrementa TEC 			    |
+| `increment_rec`   | Input   | 1 	| Frame Sequencer  | Error Mgmt 		| Incrementa REC 		     	    |
+| `decrement_tec`   | Input   | 1 	| Frame Sequencer  | Error Mgmt		 	| Decrementa TEC (após erro passive) 	    |
+| `decrement_rec`   | Input   | 1 	| Frame Sequencer  | Error Mgmt 		| Decrementa REC 		     	    |
+
+---
+
+### **9. Tx FIFO ↔ Frame Sequencer**
+
+| Sinal 		| Direção| Largura | Origem 		| Destino 	  | Descrição 		    |
+|-----------------------|--------|---------|--------------------|-----------------|-------------------------|
+| `tx_msg_valid` 	| Output | 1 	   | Tx FIFO 		| Frame Sequencer | Mensagem aguardando TX  |
+| `tx_id_out[28:0]` 	| Output | 29 	   | Tx FIFO 		| Frame Sequencer | ID a transmitir 	    |
+| `tx_dlc_out[3:0]` 	| Output | 4 	   | Tx FIFO 		| Frame Sequencer | DLC 		    |
+| `tx_data_out[63:0]` 	| Output | 64 	   | Tx FIFO 		| Frame Sequencer | Dados 		    |
+| `tx_pop` 		| Input  | 1 	   | Frame Sequencer 	| Tx FIFO 	  | Remove mensagem após TX |
+
+---
+
+### **10. Rx FIFO ↔ Frame Sequencer / Acceptance Filter**
+
+| Sinal	   			| Direção | Largura | Origem 		| Destino 	| Descrição 		|
+|-------------------------------|---------|---------|-------------------|---------------|-----------------------|
+| `rx_msg_in[ID+DLC+data]` 	| Input	  | ~100    | Frame Sequencer	| Rx FIFO 	| Mensagem recebida 	|
+| `rx_write_en` 		| Input   | 1 	    | Acceptance Filter	| Rx FIFO 	| Aceitou e armazena 	|
+| `rx_full`		 	| Output  | 1 	    | Rx FIFO 		| Host Interface| FIFO cheio = overflow |
+
+---
+
+## 🔄 FLUXO DE DADOS PRINCIPAL
+
+### **Transmissão (TX)**
+```
+Host → Tx FIFO → Frame Sequencer → Arbitration Logic → BSP (Serializer) → CRC → can_tx
+                                                    ↑
+                                              BTU (tq_clk/sample)
+```
+
+### **Recepção (RX)**
+```
+can_rx → BSP (Deserializer) → CRC Check → Frame Sequencer → Acceptance Filter → Rx FIFO → Host
+                              ↑                 ↓
+                        BTU (timing)    Error Management (TEC/REC)
+```
+
+---
+
+## 📂 HIERARQUIA DE CONEXÕES (Módulo Topo)
+
+```systemverilog
+module can_controller_top (
+  // Host interface
+  input  logic        clk, rst_n,
+  input  logic [2:0]  addr,
+  inout  logic [7:0]  data,
+  input  logic        wr, rd, cs,
+  output logic        irq,
+  // CAN interface
+  input  logic        can_rx,
+  output logic        can_tx,
+  // BTU interface (já existente)
+  input  logic        tq_clk,
+  input  logic        sample_point,
+  input  logic        sync_edge
+);
+
+  // Conexões internas (wires)
+  logic [28:0] tx_id, rx_id;
+  logic [63:0] tx_data, rx_data;
+  logic [3:0]  tx_dlc, rx_dlc;
+  logic        tx_push, tx_pop, rx_pop, rx_avail;
+  logic        tx_start, tx_bit, rx_bit, sample;
+  logic [14:0] crc_out;
+  logic        crc_match, crc_en, crc_rst;
+  logic [7:0]  tec, rec;
+  logic        error_passive, bus_off;
+  logic [4:0]  fsm_state;
+  logic        arb_won, arb_lost;
+  logic        filter_accept;
+  
+  // Instanciação de todos os módulos (com as conexões acima)
+  // ...
+  
+endmodule
+```
+
+---
+
+Este diagrama mostra **todas as conexões críticas** que você precisa implementar. A BTU (seu módulo existente) fornece apenas `tq_clk`, `sample_point` e `sync_edge` - ele não se conecta diretamente ao CRC ou ao Host Interface, apenas ao BSP e Frame Sequencer.
+
+Quer que eu gere o **template SystemVerilog starter** para o módulo topo com todas essas conexões já declaradas?
+
+-antes dos templates, eu quero pedir um diagrama de conexão dos módulos mostrando os inputs e outputs em comum e qual conecta com qual
+
+
+
+--Aqui está o **template SystemVerilog completo** do controlador CAN com todas as conexões, interfaces e estrutura pronta para implementação.
+
+---
+
+## 📁 **can_controller_top.sv** - Template Principal
+
+```systemverilog
+// ============================================================================
+// CAN Controller Top Module
+// ============================================================================
+// Description: CAN 2.0B compliant controller with complete protocol handling
+// Features:    - 11/29-bit identifiers
+//              - 8-byte payload
+//              - Error management (TEC/REC)
+//              - Acceptance filtering (4 filters)
+//              - Tx FIFO (depth 3) and Rx FIFO (depth 8)
+//              - Host interface (simple register-based)
+// ============================================================================
+
+module can_controller_top #(
+    parameter FIFO_DEPTH_TX = 3,
+    parameter FIFO_DEPTH_RX = 8,
+    parameter NUM_FILTERS   = 4
+) (
+    // Clock and Reset
+    input  logic        clk,               // System clock
+    input  logic        rst_n,             // Active low reset
+    
+    // Host Interface (Register Access)
+    input  logic [2:0]  addr,              // Register address
+    inout  logic [7:0]  data,              // Data bus
+    input  logic        wr,                // Write strobe
+    input  logic        rd,                // Read strobe
+    input  logic        cs,                // Chip select
+    output logic        irq,               // Interrupt request
+    
+    // CAN Physical Interface (to transceiver)
+    input  logic        can_rx,            // CAN receive line
+    output logic        can_tx,            // CAN transmit line
+    
+    // Bit Timing Unit Interface (external module)
+    input  logic        tq_clk,            // Time quantum clock
+    input  logic        sample_point,      // Sample point pulse
+    input  logic        sync_edge          // Synchronization edge detected
+);
+
+// ============================================================================
+// Internal Signals - Wires between modules
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// Host Interface to Status/Control Registers
+// ----------------------------------------------------------------------------
+logic        enable;                      // Controller enable
+logic        loopback_mode;               // Internal loopback test mode
+logic        reset_controller;            // Soft reset
+logic [7:0]  status_reg;                  // Status register
+logic [5:0]  irq_enable;                  // Interrupt enable bits
+logic [5:0]  irq_flags;                   // Interrupt flag bits
+logic [5:0]  irq_clear;                   // Interrupt clear bits
+
+// ----------------------------------------------------------------------------
+// Host Interface to Tx FIFO
+// ----------------------------------------------------------------------------
+logic        tx_push;                     // Push new TX message
+logic        tx_pop;                      // Pop TX message after transmission
+logic        tx_full;                     // Tx FIFO full flag
+logic        tx_empty;                    // Tx FIFO empty flag
+logic        tx_msg_valid;                // Valid message waiting to send
+logic [28:0] tx_id_in;                    // TX ID (29 bits: bit28=IDE, bits27-0=ID)
+logic [28:0] tx_id_out;                   // TX ID to sequencer
+logic [3:0]  tx_dlc_in;                   // TX DLC (Data Length Code)
+logic [3:0]  tx_dlc_out;                  // TX DLC to sequencer
+logic [63:0] tx_data_in;                  // TX data payload
+logic [63:0] tx_data_out;                 // TX data to sequencer
+
+// ----------------------------------------------------------------------------
+// Host Interface to Rx FIFO
+// ----------------------------------------------------------------------------
+logic        rx_pop;                      // Pop received message
+logic        rx_write_en;                 // Write to Rx FIFO
+logic        rx_full;                     // Rx FIFO full flag
+logic        rx_empty;                    // Rx FIFO empty flag
+logic        rx_available;                // Data available to read
+logic [28:0] rx_id_in;                    // RX ID from sequencer
+logic [28:0] rx_id_out;                   // RX ID to host
+logic [3:0]  rx_dlc_in;                   // RX DLC from sequencer
+logic [3:0]  rx_dlc_out;                  // RX DLC to host
+logic [63:0] rx_data_in;                  // RX data from sequencer
+logic [63:0] rx_data_out;                 // RX data to host
+
+// ----------------------------------------------------------------------------
+// Acceptance Filter Signals
+// ----------------------------------------------------------------------------
+logic [28:0] filter_code [NUM_FILTERS-1:0];   // Filter code registers
+logic [28:0] filter_mask [NUM_FILTERS-1:0];   // Filter mask registers
+logic        filter_accept;                   // Filter acceptance flag
+
+// ----------------------------------------------------------------------------
+// Frame Sequencer (FSM) Signals
+// ----------------------------------------------------------------------------
+typedef enum logic [4:0] {
+    IDLE        = 5'b00000,
+    SOF         = 5'b00001,
+    ARB_STD     = 5'b00010,    // Standard arbitration (11 bits)
+    ARB_EXT     = 5'b00011,    // Extended arbitration (29 bits)
+    CTRL        = 5'b00100,    // Control field (IDE, RTR, DLC)
+    DATA        = 5'b00101,    // Data field (0-8 bytes)
+    CRC_SEQ     = 5'b00110,    // CRC sequence
+    CRC_DEL     = 5'b00111,    // CRC delimiter
+    ACK_SLOT    = 5'b01000,    // ACK slot
+    ACK_DEL     = 5'b01001,    // ACK delimiter
+    EOF1        = 5'b01010,    // End of frame (first 7 bits)
+    EOF2        = 5'b01011,    // End of frame (last 4 bits)
+    INTERMISSION= 5'b01100,    // Intermission (3 bits)
+    ERROR_ACTIVE= 5'b01101,    // Active error flag (6 bits)
+    ERROR_PASSIVE=5'b01110,    // Passive error flag (6 bits)
+    OVERLOAD    = 5'b01111,    // Overload frame
+    BUS_IDLE    = 5'b10000     // Bus idle detection
+} can_state_t;
+
+can_state_t    fsm_state;                   // Current FSM state
+logic          tx_start;                    // Start transmission
+logic          tx_bit;                      // Bit to transmit
+logic          rx_sample;                   // Sampled received bit
+logic          crc_enable;                  // Enable CRC calculation
+logic          crc_reset;                   // Reset CRC calculator
+
+// ----------------------------------------------------------------------------
+// Arbitration Logic Signals
+// ----------------------------------------------------------------------------
+logic          arb_won;                     // Arbitration won flag
+logic          arb_lost;                    // Arbitration lost flag
+logic [4:0]    arb_lost_bit;                // Bit position where arbitration lost
+logic          tx_arb_lost;                 // TX lost arbitration (to FSM)
+
+// ----------------------------------------------------------------------------
+// Error Management Signals
+// ----------------------------------------------------------------------------
+logic [7:0]    tec;                         // Transmit Error Counter
+logic [7:0]    rec;                         // Receive Error Counter
+logic          error_passive;               // Error passive state
+logic          bus_off;                     // Bus off state
+logic [2:0]    error_type;                  // Error type (3'b001=bit, 010=stuff, 011=crc, 100=form, 101=ack)
+logic          increment_tec;               // Increment TEC
+logic          increment_rec;               // Increment REC
+logic          decrement_tec;               // Decrement TEC
+logic          decrement_rec;               // Decrement REC
+
+// ----------------------------------------------------------------------------
+// BSP (Bit Stream Processor) Signals
+// ----------------------------------------------------------------------------
+logic          stuff_error;                 // Bit stuffing error
+logic          bsp_tx_bit;                  // TX bit from BSP
+logic          bsp_rx_sample;               // RX sampled bit from BSP
+logic [7:0]    bsp_tx_byte;                 // TX byte to serializer
+logic [7:0]    bsp_rx_byte;                 // RX byte from deserializer
+logic          bsp_tx_byte_ready;           // TX byte ready flag
+logic          bsp_rx_byte_valid;           // RX byte valid flag
+
+// ----------------------------------------------------------------------------
+// CRC Unit Signals
+// ----------------------------------------------------------------------------
+logic [14:0]   crc_out;                     // Calculated CRC value
+logic          crc_match;                   // CRC match flag (transmission)
+logic          crc_error;                   // CRC error flag (reception)
+
+// ============================================================================
+// Module Instantiations
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// 1. Host Interface (Register File)
+// ----------------------------------------------------------------------------
+host_interface #(
+    .NUM_FILTERS(NUM_FILTERS)
+) u_host_interface (
+    .clk            (clk),
+    .rst_n          (rst_n),
+    
+    // Host bus
+    .addr           (addr),
+    .data           (data),
+    .wr             (wr),
+    .rd             (rd),
+    .cs             (cs),
+    
+    // Control registers
+    .enable_out     (enable),
+    .loopback_out   (loopback_mode),
+    .reset_out      (reset_controller),
+    .status_in      (status_reg),
+    
+    // Interrupt control
+    .irq_enable_out (irq_enable),
+    .irq_flags_in   (irq_flags),
+    .irq_clear_out  (irq_clear),
+    
+    // Tx FIFO interface
+    .tx_data_in     (tx_data_in),
+    .tx_id_in       (tx_id_in),
+    .tx_dlc_in      (tx_dlc_in),
+    .tx_push        (tx_push),
+    .tx_full_in     (tx_full),
+    
+    // Rx FIFO interface
+    .rx_data_out    (rx_data_out),
+    .rx_id_out      (rx_id_out),
+    .rx_dlc_out     (rx_dlc_out),
+    .rx_pop         (rx_pop),
+    .rx_available_in(rx_available),
+    
+    // Filter configuration
+    .filter_code_out(filter_code),
+    .filter_mask_out(filter_mask)
+);
+
+// ----------------------------------------------------------------------------
+// 2. Interrupt Controller
+// ----------------------------------------------------------------------------
+interrupt_controller u_interrupt_controller (
+    .clk            (clk),
+    .rst_n          (rst_n),
+    
+    // Interrupt sources
+    .tx_done        (tx_pop),               // TX complete
+    .rx_available   (rx_available),         // RX data ready
+    .error_occurred (error_type != 3'b000), // Any error
+    .bus_off_event  (bus_off),              // Bus off event
+    
+    // Control from host
+    .irq_enable     (irq_enable),
+    .irq_clear      (irq_clear),
+    
+    // Output
+    .irq_flags      (irq_flags),
+    .irq            (irq)
+);
+
+// ----------------------------------------------------------------------------
+// 3. Status/Control Registers
+// ----------------------------------------------------------------------------
+status_control_regs u_status_control_regs (
+    .clk            (clk),
+    .rst_n          (rst_n),
+    
+    // Control inputs
+    .enable         (enable),
+    .reset_controller(reset_controller),
+    
+    // Status inputs
+    .tec_in         (tec),
+    .rec_in         (rec),
+    .error_passive_in(error_passive),
+    .bus_off_in     (bus_off),
+    .tx_busy        (~tx_empty),            // Transmitting if TX FIFO has data
+    .rx_full_in     (rx_full),
+    
+    // Status output
+    .status_out     (status_reg)
+);
+
+// ----------------------------------------------------------------------------
+// 4. Tx FIFO
+// ----------------------------------------------------------------------------
+tx_fifo #(
+    .FIFO_DEPTH(FIFO_DEPTH_TX)
+) u_tx_fifo (
+    .clk            (clk),
+    .rst_n          (rst_n),
+    
+    // Host interface (write)
+    .data_in        (tx_data_in),
+    .id_in          (tx_id_in),
+    .dlc_in         (tx_dlc_in),
+    .push           (tx_push),
+    
+    // Sequencer interface (read)
+    .data_out       (tx_data_out),
+    .id_out         (tx_id_out),
+    .dlc_out        (tx_dlc_out),
+    .pop            (tx_pop),
+    
+    // Status
+    .full           (tx_full),
+    .empty          (tx_empty),
+    .msg_valid      (tx_msg_valid)
+);
+
+// ----------------------------------------------------------------------------
+// 5. Rx FIFO
+// ----------------------------------------------------------------------------
+rx_fifo #(
+    .FIFO_DEPTH(FIFO_DEPTH_RX)
+) u_rx_fifo (
+    .clk            (clk),
+    .rst_n          (rst_n),
+    
+    // Sequencer interface (write)
+    .data_in        (rx_data_in),
+    .id_in          (rx_id_in),
+    .dlc_in         (rx_dlc_in),
+    .write_en       (rx_write_en),
+    
+    // Host interface (read)
+    .data_out       (rx_data_out),
+    .id_out         (rx_id_out),
+    .dlc_out        (rx_dlc_out),
+    .pop            (rx_pop),
+    
+    // Status
+    .full           (rx_full),
+    .empty          (rx_empty),
+    .available      (rx_available)
+);
+
+// ----------------------------------------------------------------------------
+// 6. Acceptance Filter
+// ----------------------------------------------------------------------------
+acceptance_filter #(
+    .NUM_FILTERS(NUM_FILTERS)
+) u_acceptance_filter (
+    .clk            (clk),
+    .rst_n          (rst_n),
+    
+    // ID to filter
+    .id_in          (rx_id_in),
+    
+    // Filter configuration from host
+    .filter_code    (filter_code),
+    .filter_mask    (filter_mask),
+    
+    // Filter result
+    .accept         (filter_accept),
+    
+    // Write enable to Rx FIFO
+    .rx_write_en    (rx_write_en)
+);
+
+// ----------------------------------------------------------------------------
+// 7. Frame Sequencer (Protocol FSM)
+// ----------------------------------------------------------------------------
+frame_sequencer u_frame_sequencer (
+    .clk            (clk),
+    .rst_n          (rst_n),
+    
+    // Enable and mode
+    .enable         (enable),
+    .loopback_mode  (loopback_mode),
+    
+    // Tx FIFO interface
+    .tx_msg_valid   (tx_msg_valid),
+    .tx_id          (tx_id_out),
+    .tx_dlc         (tx_dlc_out),
+    .tx_data        (tx_data_out),
+    .tx_pop         (tx_pop),
+    
+    // Rx FIFO interface
+    .rx_id_out      (rx_id_in),
+    .rx_dlc_out     (rx_dlc_in),
+    .rx_data_out    (rx_data_in),
+    .rx_write_en    (rx_write_en),
+    
+    // BSP interface
+    .tx_start       (tx_start),
+    .tx_bit         (tx_bit),
+    .rx_sample      (rx_sample),
+    .stuff_error    (stuff_error),
+    
+    // Arbitration interface
+    .arb_won        (arb_won),
+    .tx_arb_lost    (tx_arb_lost),
+    
+    // CRC interface
+    .crc_enable     (crc_enable),
+    .crc_reset      (crc_reset),
+    .crc_match      (crc_match),
+    .crc_error      (crc_error),
+    
+    // Error management interface
+    .error_type     (error_type),
+    .error_passive  (error_passive),
+    .bus_off        (bus_off),
+    .increment_tec  (increment_tec),
+    .increment_rec  (increment_rec),
+    .decrement_tec  (decrement_tec),
+    .decrement_rec  (decrement_rec),
+    
+    // BTU interface
+    .tq_clk         (tq_clk),
+    .sample_point   (sample_point),
+    .sync_edge      (sync_edge),
+    
+    // State output (debug)
+    .state_out      (fsm_state)
+);
+
+// ----------------------------------------------------------------------------
+// 8. Bit Stream Processor (BSP)
+// ----------------------------------------------------------------------------
+bsp u_bsp (
+    .clk            (clk),
+    .rst_n          (rst_n),
+    
+    // CAN physical interface
+    .can_rx         (can_rx),
+    .can_tx         (can_tx),
+    
+    // BTU timing
+    .tq_clk         (tq_clk),
+    .sample_point   (sample_point),
+    
+    // Frame sequencer interface
+    .tx_start       (tx_start),
+    .tx_bit_out     (tx_bit),
+    .rx_bit_in      (rx_sample),
+    .stuff_error_out(stuff_error),
+    
+    // CRC interface
+    .crc_enable     (crc_enable),
+    .crc_bit_out    (crc_bit),              // Bit to CRC calculator
+    
+    // Loopback mode
+    .loopback_mode  (loopback_mode)
+);
+
+// ----------------------------------------------------------------------------
+// 9. CRC Unit
+// ----------------------------------------------------------------------------
+crc_unit u_crc_unit (
+    .clk            (clk),
+    .rst_n          (rst_n),
+    
+    // Control
+    .enable         (crc_enable),
+    .reset          (crc_reset),
+    
+    // Data input
+    .bit_in         (crc_bit),              // From BSP
+    
+    // Received CRC from frame (16th bit of CRC field)
+    .rx_crc_in      (rx_crc),               // From BSP during CRC field
+    
+    // Outputs
+    .crc_out        (crc_out),
+    .crc_match      (crc_match),
+    .crc_error      (crc_error)
+);
+
+// ----------------------------------------------------------------------------
+// 10. Arbitration Logic
+// ----------------------------------------------------------------------------
+arbitration_logic u_arbitration_logic (
+    .clk            (clk),
+    .rst_n          (rst_n),
+    
+    // TX ID from sequencer
+    .tx_id          (tx_id_out),
+    
+    // TX/RX bits
+    .tx_bit         (tx_bit),
+    .rx_bit         (rx_sample),
+    
+    // Arbitration result
+    .arb_won        (arb_won),
+    .arb_lost       (arb_lost),
+    .arb_lost_bit   (arb_lost_bit),
+    
+    // To frame sequencer
+    .tx_arb_lost    (tx_arb_lost),
+    
+    // Enable (only active during arbitration field)
+    .arb_enable     (fsm_state == ARB_STD || fsm_state == ARB_EXT)
+);
+
+// ----------------------------------------------------------------------------
+// 11. Error Management Logic (TEC/REC)
+// ----------------------------------------------------------------------------
+error_management u_error_management (
+    .clk            (clk),
+    .rst_n          (rst_n),
+    
+    // Error events
+    .error_type     (error_type),
+    .increment_tec  (increment_tec),
+    .increment_rec  (increment_rec),
+    .decrement_tec  (decrement_tec),
+    .decrement_rec  (decrement_rec),
+    
+    // Arbitration lost info
+    .arb_lost_bit   (arb_lost_bit),
+    
+    // Error counters
+    .tec_out        (tec),
+    .rec_out        (rec),
+    
+    // Error states
+    .error_passive  (error_passive),
+    .bus_off        (bus_off),
+    
+    // Recovery (11 recessive bits after bus off)
+    .bus_idle_detected (fsm_state == BUS_IDLE)
+);
+
+// ============================================================================
+// Additional internal signals (not declared above)
+// ============================================================================
+logic crc_bit;          // Bit to CRC calculator (from BSP)
+logic rx_crc;           // Received CRC bit (from BSP during CRC field)
+
+// Note: rx_crc is extracted from the RX bit stream during CRC field
+// This should be controlled by the frame sequencer FSM
+
+endmodule
+```
+
+---
+
+## 📁 **Módulos Auxiliares (Interfaces básicas)**
+
+### **host_interface.sv** (Template simplificado)
+
+```systemverilog
+module host_interface #(
+    parameter NUM_FILTERS = 4
+) (
+    input  logic        clk, rst_n,
+    input  logic [2:0]  addr,
+    inout  logic [7:0]  data,
+    input  logic        wr, rd, cs,
+    output logic        enable_out,
+    output logic        loopback_out,
+    output logic        reset_out,
+    input  logic [7:0]  status_in,
+    output logic [5:0]  irq_enable_out,
+    input  logic [5:0]  irq_flags_in,
+    output logic [5:0]  irq_clear_out,
+    output logic [63:0] tx_data_in,
+    output logic [28:0] tx_id_in,
+    output logic [3:0]  tx_dlc_in,
+    output logic        tx_push,
+    input  logic        tx_full_in,
+    input  logic [63:0] rx_data_out,
+    input  logic [28:0] rx_id_out,
+    input  logic [3:0]  rx_dlc_out,
+    output logic        rx_pop,
+    input  logic        rx_available_in,
+    output logic [28:0] filter_code_out [NUM_FILTERS-1:0],
+    output logic [28:0] filter_mask_out [NUM_FILTERS-1:0]
+);
+
+    // Register addresses
+    localparam REG_CON      = 3'b000;  // Control register
+    localparam REG_STATUS   = 3'b001;  // Status register
+    localparam REG_INT_EN   = 3'b010;  // Interrupt enable
+    localparam REG_INT_FLAG = 3'b011;  // Interrupt flags
+    localparam REG_TX_ID1   = 3'b100;  // TX ID low byte
+    localparam REG_TX_ID2   = 3'b101;  // TX ID high byte
+    localparam REG_TX_DLC   = 3'b110;  // TX DLC
+    // ... (implement complete register map)
+    
+    logic [7:0] control_reg;
+    logic [5:0] int_en_reg;
+    
+    assign enable_out    = control_reg[0];
+    assign loopback_out  = control_reg[1];
+    assign reset_out     = control_reg[2];
+    assign irq_enable_out = int_en_reg;
+    
+    // Bus read/write logic
+    // ... (implement bus interface)
+    
+endmodule
+```
+
+### **interrupt_controller.sv**
+
+```systemverilog
+module interrupt_controller (
+    input  logic        clk, rst_n,
+    input  logic        tx_done,
+    input  logic        rx_available,
+    input  logic        error_occurred,
+    input  logic        bus_off_event,
+    input  logic [5:0]  irq_enable,
+    input  logic [5:0]  irq_clear,
+    output logic [5:0]  irq_flags,
+    output logic        irq
+);
+    
+    logic [5:0] flags;
+    
+    // Flag definitions
+    localparam TX_DONE_FLAG     = 0;
+    localparam RX_AVAIL_FLAG    = 1;
+    localparam ERROR_FLAG       = 2;
+    localparam BUS_OFF_FLAG     = 3;
+    
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            flags <= 6'b0;
+        end else begin
+            if (tx_done)        flags[TX_DONE_FLAG]  <= 1'b1;
+            if (rx_available)   flags[RX_AVAIL_FLAG] <= 1'b1;
+            if (error_occurred) flags[ERROR_FLAG]    <= 1'b1;
+            if (bus_off_event)  flags[BUS_OFF_FLAG]  <= 1'b1;
+            if (|irq_clear)     flags <= flags & ~irq_clear;
+        end
+    end
+    
+    assign irq_flags = flags;
+    assign irq = |(flags & irq_enable);
+    
+endmodule
+```
+
+---
+
+## 📁 **Conexões Resumidas (Para referência rápida)**
+
+```
+Sinal                    Origem → Destino
+─────────────────────────────────────────────────────────────
+enable                   Host I/F → Todos
+tx_push                  Host I/F → Tx FIFO
+tx_pop                   Frame Seq → Tx FIFO
+tx_msg_valid             Tx FIFO → Frame Seq
+tx_id_out                Tx FIFO → Frame Seq, Arb
+tx_data_out              Tx FIFO → Frame Seq
+rx_write_en              Accept Filter → Rx FIFO
+rx_id_in                 Frame Seq → Rx FIFO, Accept Filter
+filter_accept            Accept Filter → Frame Seq (via Rx write)
+tx_start                 Frame Seq → BSP
+tx_bit                   BSP → Frame Seq, Arb
+rx_sample                BSP → Frame Seq, Arb
+stuff_error              BSP → Frame Seq
+crc_enable               Frame Seq → CRC, BSP
+crc_match                CRC → Frame Seq
+crc_error                CRC → Frame Seq
+arb_won                  Arb → Frame Seq
+error_type               Frame Seq → Error Mgmt
+tec/rec                  Error Mgmt → Status Reg
+error_passive/bus_off    Error Mgmt → Frame Seq, Status
+tq_clk/sample_point      BTU → BSP, Frame Seq
+can_rx/can_tx            BSP → Pinos topo
+irq                      Int Ctrl → Host I/F
+```
+
+---
+
