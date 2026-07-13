@@ -346,4 +346,4 @@ module can_btu #(
         end
     end
 
-endmodule : can_btu_top
+endmodule : can_btu

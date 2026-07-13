@@ -1,0 +1,348 @@
+$date
+	Tue Jul 07 22:07:18 2026
+$end
+$version
+	Icarus Verilog
+$end
+$timescale
+	1ps
+$end
+$scope module tb_can_arbitration $end
+$var wire 6 ! arb_lost_bit [5:0] $end
+$var wire 1 " arb_lost $end
+$var wire 1 # arb_active $end
+$var reg 1 $ arb_en $end
+$var reg 1 % clk $end
+$var reg 1 & rst_n $end
+$var reg 1 ' rx_bit $end
+$var reg 1 ( sample_tick $end
+$var reg 1 ) tx_bit $end
+$var integer 32 * errors [31:0] $end
+$scope module DUT $end
+$var wire 1 # arb_active $end
+$var wire 1 $ arb_en $end
+$var wire 1 " arb_lost $end
+$var wire 6 + arb_lost_bit [5:0] $end
+$var wire 1 % clk $end
+$var wire 1 & rst_n $end
+$var wire 1 ' rx_bit $end
+$var wire 1 ( sample_tick $end
+$var wire 1 ) tx_bit $end
+$var reg 6 , bit_cnt [5:0] $end
+$var reg 6 - lost_bit_r [5:0] $end
+$var reg 1 . lost_r $end
+$upscope $end
+$scope begin $ivl_for_loop0 $end
+$var integer 32 / i [31:0] $end
+$upscope $end
+$scope begin $ivl_for_loop1 $end
+$var integer 32 0 i [31:0] $end
+$upscope $end
+$scope task chk $end
+$var reg 1 1 cond $end
+$upscope $end
+$scope task sample $end
+$upscope $end
+$upscope $end
+$enddefinitions $end
+$comment Show the parameter values. $end
+$dumpall
+$end
+#0
+$dumpvars
+01
+b0 0
+b0 /
+0.
+b0 -
+b0 ,
+b0 +
+b0 *
+0)
+0(
+0'
+0&
+0%
+0$
+0#
+0"
+b0 !
+$end
+#10000
+1%
+#20000
+0%
+#30000
+1%
+#40000
+0%
+#50000
+1&
+1%
+#60000
+0%
+#70000
+1#
+1$
+11
+1%
+#80000
+1(
+0%
+#90000
+b1 ,
+1%
+#100000
+b1 /
+0(
+0%
+#110000
+1%
+#120000
+1(
+0%
+#130000
+b10 ,
+1%
+#140000
+b10 /
+0(
+0%
+#150000
+1%
+#160000
+1(
+0%
+#170000
+b11 ,
+1%
+#180000
+b11 /
+0(
+0%
+#190000
+1%
+#200000
+1(
+0%
+#210000
+b100 ,
+1%
+#220000
+b100 /
+0(
+0%
+#230000
+1%
+#240000
+1(
+0%
+#250000
+b101 ,
+1%
+#260000
+b101 /
+0(
+0%
+#270000
+1%
+#280000
+1(
+0%
+#290000
+b110 ,
+1%
+#300000
+b110 /
+0(
+0%
+#310000
+1%
+#320000
+1(
+0%
+#330000
+b111 ,
+1%
+#340000
+b111 /
+0(
+0%
+#350000
+1%
+#360000
+1(
+0%
+#370000
+b1000 ,
+1%
+#380000
+b1000 /
+0(
+0%
+#390000
+1%
+#400000
+1(
+0%
+#410000
+b1001 ,
+1%
+#420000
+b1001 /
+0(
+0%
+#430000
+1%
+#440000
+1(
+0%
+#450000
+b1010 ,
+1%
+#460000
+b1010 /
+0(
+0%
+#470000
+1%
+#480000
+1(
+0%
+#490000
+b1011 ,
+1%
+#500000
+b1011 /
+0(
+0%
+#510000
+1%
+#520000
+1(
+0%
+#530000
+b1100 ,
+1%
+#540000
+0#
+0$
+b1100 /
+0(
+0%
+#550000
+b0 ,
+1%
+#560000
+1#
+1$
+0%
+#570000
+1%
+#580000
+1(
+0%
+#590000
+b1 ,
+1%
+#600000
+b1 0
+0(
+0%
+#610000
+1%
+#620000
+1(
+0%
+#630000
+b10 ,
+1%
+#640000
+b10 0
+0(
+0%
+#650000
+1%
+#660000
+1(
+0%
+#670000
+b11 ,
+1%
+#680000
+b11 0
+0(
+0%
+#690000
+1%
+#700000
+1(
+0%
+#710000
+b100 ,
+1%
+#720000
+b100 0
+0(
+0%
+#730000
+1%
+#740000
+1(
+0%
+#750000
+b101 ,
+1%
+#760000
+1)
+b101 0
+0(
+0%
+#770000
+1%
+#780000
+1(
+0%
+#790000
+0#
+b110 ,
+b101 !
+b101 +
+b101 -
+1"
+1.
+1%
+#800000
+0(
+0%
+#810000
+1%
+#820000
+1(
+0%
+#830000
+1%
+#840000
+0(
+0%
+#850000
+1%
+#860000
+1(
+0%
+#870000
+1%
+#880000
+0$
+0(
+0%
+#890000
+b0 !
+b0 +
+b0 -
+b0 ,
+0"
+0.
+1%
+#900000
+0%

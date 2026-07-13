@@ -1,0 +1,261 @@
+$date
+	Tue Jul 07 22:07:19 2026
+$end
+$version
+	Icarus Verilog
+$end
+$timescale
+	1ps
+$end
+$scope module tb_can_acceptance $end
+$var wire 1 ! reject $end
+$var wire 1 " accept $end
+$var parameter 32 # N $end
+$var reg 1 $ check_strobe $end
+$var reg 1 % clk $end
+$var reg 4 & filt_en [3:0] $end
+$var reg 29 ' id [28:0] $end
+$var reg 1 ( ide $end
+$var reg 1 ) rst_n $end
+$var integer 32 * errors [31:0] $end
+$scope module DUT $end
+$var wire 1 $ check_strobe $end
+$var wire 1 % clk $end
+$var wire 4 + filt_en [3:0] $end
+$var wire 29 , id [28:0] $end
+$var wire 1 ( ide $end
+$var wire 1 ) rst_n $end
+$var parameter 32 - NUM_FILTERS $end
+$var reg 1 " accept $end
+$var reg 1 . accept_comb $end
+$var reg 1 ! reject $end
+$scope begin $ivl_for_loop0 $end
+$var integer 32 / i [31:0] $end
+$upscope $end
+$upscope $end
+$scope begin $ivl_for_loop1 $end
+$var integer 32 0 i [31:0] $end
+$upscope $end
+$scope task chk $end
+$var reg 1 1 cond $end
+$upscope $end
+$scope task eval_check $end
+$var reg 1 2 exp_accept $end
+$upscope $end
+$upscope $end
+$enddefinitions $end
+$comment Show the parameter values. $end
+$dumpall
+b100 -
+b100 #
+$end
+#0
+$dumpvars
+02
+01
+b100 0
+b100 /
+0.
+b0 ,
+b0 +
+b0 *
+0)
+0(
+b0 '
+b0 &
+0%
+0$
+0"
+0!
+$end
+#10000
+1%
+#20000
+0%
+#30000
+1%
+#40000
+0%
+#50000
+1)
+1%
+#60000
+0%
+#70000
+b100 /
+b100100011 '
+b100100011 ,
+11
+1%
+#80000
+1$
+0%
+#90000
+1!
+1%
+#100000
+0$
+0%
+#110000
+1.
+b100 /
+12
+b1 &
+b1 +
+1%
+#120000
+1$
+0%
+#130000
+0!
+1"
+1%
+#140000
+0$
+0%
+#150000
+b100 /
+0.
+02
+b100100100 '
+b100100100 ,
+1%
+#160000
+1$
+0%
+#170000
+1!
+0"
+1%
+#180000
+0$
+0%
+#190000
+1.
+b100 /
+12
+b100100011 '
+b100100011 ,
+1%
+#200000
+1$
+0%
+#210000
+0!
+1"
+1%
+#220000
+0$
+0%
+#230000
+b100 /
+1.
+b11111111111 '
+b11111111111 ,
+1%
+#240000
+1$
+0%
+#250000
+1%
+#260000
+0$
+0%
+#270000
+b100 /
+0.
+02
+b100000000000000000000000 '
+b100000000000000000000000 ,
+1%
+#280000
+1$
+0%
+#290000
+1!
+0"
+1%
+#300000
+0$
+0%
+#310000
+1.
+b100 /
+12
+b0 '
+b0 ,
+1%
+#320000
+1$
+0%
+#330000
+0!
+1"
+1%
+#340000
+0$
+0%
+#350000
+b100 /
+0.
+02
+1(
+1%
+#360000
+1$
+0%
+#370000
+1!
+0"
+1%
+#380000
+0$
+0%
+#390000
+1.
+b100 /
+12
+0(
+1%
+#400000
+1$
+0%
+#410000
+0!
+1"
+1%
+#420000
+0$
+0%
+#430000
+b100 /
+1.
+1(
+1%
+#440000
+1$
+0%
+#450000
+1%
+#460000
+0$
+0%
+#470000
+b100 /
+1.
+0(
+b101010111100 '
+b101010111100 ,
+b11 &
+b11 +
+1%
+#480000
+1$
+0%
+#490000
+1%
+#500000
+0$
+0%
+#510000
+1%

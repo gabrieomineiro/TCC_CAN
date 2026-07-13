@@ -6,9 +6,9 @@ set LIB_DIR /pdk/gpdk045/gsclib045_svt_v4.7/gsclib045/timing
 #Pasta da Biblioteca fisica
 set LEF_DIR /pdk/gpdk045/gsclib045_svt_v4.7/gsclib045/lef
 #Modulo principal (top)
-set HDL_NAME "can_btu_top"
+set HDL_NAME "can_btu"
 #Arquivos HDL - verilog
-set HDL_FILES {can_btu_defines.svh can_btu_top.sv}
+set HDL_FILES {can_defines.svh can_btu.sv}
 
 #Biblioteca pessimista
 set WORST_LIST {slow_vdd1v0_basicCells.lib} 

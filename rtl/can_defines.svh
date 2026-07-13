@@ -1,36 +1,42 @@
 //-----------------------------------------------------------------------------
-// Módulo: can_btu_defines.svh
-// Descrição: Definições comuns para a CAN Bit Timing Unit(BTU) 
-// Autor: Gabriel de Lima Pessoa
-// Versão: 1.0
+// can_defines.svh
+// Definições comuns do controlador CAN 2.0B.
+// Codificação DIRETA: segmento = nº de TQ; prescaler = ciclos por TQ.
 //-----------------------------------------------------------------------------
+`ifndef CAN_DEFINES_SVH
+`define CAN_DEFINES_SVH
 
-`ifndef CAN_BTU_DEFINES_SVH
-`define CAN_BTU_DEFINES_SVH
+// --- Larguras dos campos de bit timing ---
+localparam int CAN_PRESC_WIDTH = 8;
+localparam int CAN_PROP_WIDTH  = 3;
+localparam int CAN_PHASE_WIDTH = 3;
+localparam int CAN_SJW_WIDTH   = 2;
 
-//-----------------------------------------------------------------------------
-// Parâmetros de Temporização de Bit
-//-----------------------------------------------------------------------------
+// --- Defaults de bit timing: 500 kbps @ 50 MHz, sample point 80% ---
+// prescaler=10, prop=2, seg1=5, seg2=2 -> total_tq=10, sample_tq=8
+localparam bit [7:0] DEFAULT_PRESCALER   = 8'd10;
+localparam bit [2:0] DEFAULT_PROP_SEG    = 3'd2;
+localparam bit [2:0] DEFAULT_PHASE_SEG1  = 3'd5;
+localparam bit [2:0] DEFAULT_PHASE_SEG2  = 3'd2;
+localparam bit [1:0] DEFAULT_SJW         = 2'd2;
 
-// Larguras dos segmentos de temporização
-localparam int CAN_PRESC_WIDTH   = 8;   // Largura do prescaler
-localparam int CAN_PROP_WIDTH    = 3;   // Largura do segmento de propagação
-localparam int CAN_PHASE_WIDTH   = 3;   // Largura do segmento de fase
-localparam int CAN_SJW_WIDTH     = 2;   // Largura do Salto de Sincronização (SJW)
+// --- Formato de mensagem (descritor do FIFO) ---
+// msg[98:0] = { RTR[98], IDE[97], ID[96:68], DLC[67:64], DATA[63:0] }
+localparam int CAN_ID_WIDTH   = 29;
+localparam int CAN_DLC_WIDTH  = 4;
+localparam int CAN_DATA_WIDTH = 64;
+localparam int CAN_MSG_WIDTH  = 1 + 1 + CAN_ID_WIDTH + CAN_DLC_WIDTH + CAN_DATA_WIDTH; // 99
 
-// Valores padrão de temporização (para 500 kbps @ clock de 50 MHz)
-localparam bit [7:0]  DEFAULT_PRESCALER = 8'd4;   // Prescaler padrão
-localparam bit [2:0]  DEFAULT_PROP_SEG  = 3'd2;   // Segmento de propagação padrão
-localparam bit [2:0]  DEFAULT_PHASE_SEG1 = 3'd4;  // Segmento de fase 1 padrão
-localparam bit [2:0]  DEFAULT_PHASE_SEG2 = 3'd4;  // Segmento de fase 2 padrão
-localparam bit [1:0]  DEFAULT_SJW       = 2'd2;   // SJW padrão
+// --- Profundidades FIFO e filtros ---
+localparam int CAN_FIFO_TX_DEPTH = 8;
+localparam int CAN_FIFO_RX_DEPTH = 8;
+localparam int CAN_NUM_FILTERS   = 4;
 
-//-----------------------------------------------------------------------------
-// Macros
-//-----------------------------------------------------------------------------
+// --- Valores lógicos do barramento CAN ---
+`define CAN_DOMINANT  1'b0   // dominante  (0)
+`define CAN_RECESSIVE 1'b1   // recessivo  (1)
 
-// Valores de bits dominante e recessivo
-`define CAN_DOMINANT 1'b0   // Dominante
-`define CAN_RECESSIVE 1'b1  // Recessivo
+// --- CRC-15 ---
+localparam bit [14:0] CAN_CRC_POLY = 15'h4599;
 
-`endif // CAN_BTU_DEFINES_SVH
+`endif // CAN_DEFINES_SVH
