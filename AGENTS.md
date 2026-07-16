@@ -126,6 +126,13 @@ Ao criar um novo env, **copie a estrutura do BTU** e adapte nomes/spec.
 - **Síntese:** Genus via `script/setup_1.tcl` (alvo gpdk045).
 - **Filelists:** `script/simlist.f` (BTU), `script/simlist_can.f` (top), `script/cellist.f`
   (gate-level), `script/synth.f` (síntese), `script/run_btu.sh` (runner BTU).
+- **Runners de simulação:**
+  - `script/run_btu.sh [test]` — BTU (UVM, `+UVM_TESTNAME`).
+  - `script/run_module_tbs.sh` — roda TODOS os TBs simples dos módulos em sequência.
+  - `script/run_tb.sh` — roda UM TB simples por vez (menu interativo); só o TB escolhido
+    é compilado (demais ficam comentados, sem conflito de `module tb`). Logs em
+    `rpt/tb_runs/`; arquivos gerados pelo xrun (INCA_lib/waves/snapshots) em `genus/`
+    via `genus/cds.lib` + `-tmpdir genus/tmp`.
 
 ## 7. Mapa de registradores e formato de mensagem
 - Registradores APB: `Docs/specs/01_mapa_registradores_apb.md`.

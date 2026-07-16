@@ -136,6 +136,8 @@ xrun -uvm -sv -access +rwc -timescale 1ns/1ps -f script/simlist.f +UVM_TESTNAME=
 
 # Rodar todos os TBs simples dos módulos (Xcelium):
 ./script/run_module_tbs.sh
+# ou UM TB por vez (menu interativo; logs em rpt/tb_runs/, arquivos do xrun em genus/):
+./script/run_tb.sh
 # ou um específico:
 xrun -sv -access +rwc -timescale 1ns/1ps -f script/simlist_can.f uvm/testbench/tb_can_crc.sv
 ```
